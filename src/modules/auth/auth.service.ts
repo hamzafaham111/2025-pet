@@ -229,11 +229,68 @@ export class AuthService {
     await user.save();
   }
 
+  // async verifyAndRefreshToken(token: string) {
+  //   try {
+  //     // Verify the access token
+  //     const payload = this.jwtService.verify(token);
+      
+  //     // If token is valid and not near expiration, return success
+  //     const tokenExp = payload.exp * 1000; // Convert to milliseconds
+  //     const currentTime = Date.now();
+  //     const timeUntilExp = tokenExp - currentTime;
+      
+  //     // If token is valid and has more than 5 minutes left, return success
+  //     if (timeUntilExp > 5 * 60 * 1000) {
+  //       return { 
+  //         valid: true,
+  //         user: payload
+  //       };
+  //     }
+
+  //     // If token is about to expire, try to refresh it
+  //     const user = await this.userModel.findById(payload.sub);
+  //     if (!user) {
+  //       throw new UnauthorizedException('User not found');
+  //     }
+
+  //     // Get refresh token from user document
+  //     const refreshToken = user.refreshToken;
+  //     if (!refreshToken) {
+  //       throw new UnauthorizedException('No refresh token found');
+  //     }
+
+  //     try {
+  //       // Verify refresh token
+  //       const refreshPayload = this.jwtService.verify(refreshToken);
+        
+  //       // Generate new access token
+  //       const newAccessToken = this.jwtService.sign(
+  //         { email: user.email, sub: user._id },
+  //         { expiresIn: '30m' }
+  //       );
+
+  //       return {
+  //         valid: true,
+  //         user: payload,
+  //         newToken: newAccessToken
+  //       };
+  //     } catch (error) {
+  //       // If refresh token is invalid, force re-login
+  //       throw new UnauthorizedException('Invalid refresh token');
+  //     }
+  //   } catch (error) {
+  //     if (error.name === 'TokenExpiredError') {
+  //       throw new UnauthorizedException('Token expired');
+  //     }
+  //     throw new UnauthorizedException('Invalid token');
+  //   }
+  // }
+
   async verifyAndRefreshToken(token: string) {
     try {
       // Verify the access token
       const payload = this.jwtService.verify(token);
-      
+      console.log({payload});
       // If token is valid and not near expiration, return success
       const tokenExp = payload.exp * 1000; // Convert to milliseconds
       const currentTime = Date.now();
@@ -246,42 +303,77 @@ export class AuthService {
           user: payload
         };
       }
-
+      console.log("token is valid and not near expiration");
       // If token is about to expire, try to refresh it
       const user = await this.userModel.findById(payload.sub);
       if (!user) {
         throw new UnauthorizedException('User not found');
       }
-
+      console.log("user found");
       // Get refresh token from user document
       const refreshToken = user.refreshToken;
+      console.log({refreshToken}); 
       if (!refreshToken) {
         throw new UnauthorizedException('No refresh token found');
       }
-
+      console.log("refresh token found");
       try {
         // Verify refresh token
         const refreshPayload = this.jwtService.verify(refreshToken);
-        
+        console.log({refreshPayload});
+        // Check if refresh token is expired
+        const refreshTokenExp = refreshPayload.exp * 1000;
+        if (refreshTokenExp < Date.now()) {
+          throw new UnauthorizedException('Refresh token expired');
+        }
+        console.log("refresh token is not expired");
+        // Check if refresh token matches the user
+        if (refreshPayload.sub !== user._id.toString()) {
+          console.log('Invalid refresh token');
+          throw new UnauthorizedException('Invalid refresh token');
+        }
+        console.log("refresh token matches the user"); 
         // Generate new access token
         const newAccessToken = this.jwtService.sign(
-          { email: user.email, sub: user._id },
+          { 
+            email: user.email, 
+            sub: user._id,
+            isVerified: user.isVerified // Include verification status
+          },
           { expiresIn: '30m' }
         );
-
+        console.log("new access token generated");
+        // Optionally, you might want to generate a new refresh token too
+        const newRefreshToken = this.jwtService.sign(
+          { sub: user._id },
+          { expiresIn: '7d' }
+        );
+        console.log("new refresh token generated");
+        // Update user's refresh token in database
+        await this.userModel.findByIdAndUpdate(user._id, {
+          refreshToken: newRefreshToken
+        });
+        console.log("updated refresh token");
         return {
           valid: true,
           user: payload,
-          newToken: newAccessToken
+          newToken: newAccessToken,
+          newRefreshToken // Include new refresh token in response
         };
       } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+          throw new UnauthorizedException('Refresh token expired');
+        }
+        console.log('Invalid refresh token');
         // If refresh token is invalid, force re-login
         throw new UnauthorizedException('Invalid refresh token');
       }
     } catch (error) {
       if (error.name === 'TokenExpiredError') {
+        console.log('Token expired');
         throw new UnauthorizedException('Token expired');
       }
+      console.log('Invalid token');
       throw new UnauthorizedException('Invalid token');
     }
   }

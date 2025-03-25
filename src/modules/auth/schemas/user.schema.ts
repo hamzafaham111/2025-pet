@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 @Schema()
 export class User extends Document {
@@ -26,6 +26,9 @@ export class User extends Document {
 
   @Prop({ type: String, default: null })
   refreshToken: string | null;
+
+ // Declare _id type explicitly to avoid overwriting the Document type's _id property
+ declare _id: Types.ObjectId;  // <-- Use declare here instead of defining _id explicitly
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -28,11 +28,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto) {
     const result = await this.authService.login(loginDto);
-    
+    console.log(result);
     if (result.statusCode === 403) {
       throw new HttpException(result, HttpStatus.FORBIDDEN);
     }
-    
+
     return result;
   }
 
@@ -54,6 +54,7 @@ export class AuthController {
   @Get('verify-token')
   async verifyToken(@Headers('authorization') authHeader: string) {
     try {
+      console.log("api called")
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         throw new UnauthorizedException('No token provided');
       }
